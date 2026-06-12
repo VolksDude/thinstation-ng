@@ -21,6 +21,9 @@ export PORTS="	exo \
 		xfdesktop \
 		xfwm4 \
 		iceauth \
+		bubblewrap \
+		glycin-libs \
+		glycin-loaders \
 		gtk-xfce-engine \
 "
 #xfce-polkit
