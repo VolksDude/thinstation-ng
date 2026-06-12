@@ -135,8 +135,8 @@ package xfce4-pulseaudio-plugin # Systray volume icon
 ##########################
 # Networking-related packages and utilities.
 
-package autonet              # Legacy automatic network configuration
-#package networkmanager       # Modern network management service
+#package autonet              # Legacy automatic network configuration
+package networkmanager       # Modern network management service
 #package sssd                 # LDAP/AD authentication for a multiuser system
 #package bluetooth            # Bluetooth support and applets
 #package wireless             # Wireless tools and drivers
@@ -150,8 +150,8 @@ package autonet              # Legacy automatic network configuration
 ###############################
 
 #package ssh                  # SSH client
-#package wget                 # Command-line HTTP and FTP client
-#package curl                 # Command-line tool for transferring data with URLs
+package wget                 # Command-line HTTP and FTP client
+package curl                 # Command-line tool for transferring data with URLs
 
 #########################
 ### --- Utilities --- ###
@@ -307,7 +307,7 @@ package icons-gnome          # GNOME icon set
 package icons-hicolor        # Hicolor icon theme
 package icons-adwaita        # Adwaita icon theme
 
-package gtk-theme-adwaita    # Adwaita GTK theme
+##DEPRECATED package gtk-theme-adwaita    # Adwaita GTK theme
 
 ######################################
 ### --- Build Control Settings --- ###
