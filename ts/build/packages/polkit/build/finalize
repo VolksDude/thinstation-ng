@@ -10,3 +10,8 @@ chmod 0750 /var/lib/polkit-1
 chmod 4755 /lib64/polkit-1/polkit-agent-helper-1
 chmod 4755 /bin/pkexec
 
+# Comment out restrictive sandbox directives that break polkit in ThinStation
+POLKIT_SERVICE=/lib/systemd/system/polkit.service
+for directive in SystemCallFilter RestrictAddressFamilies ProtectHome ProtectSystem CapabilityBoundingSet; do
+    sed -i "s/^\(${directive}=\)/#\1/" "$POLKIT_SERVICE"
+done
