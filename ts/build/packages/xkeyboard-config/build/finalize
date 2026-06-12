@@ -1,0 +1,4 @@
+rm -rf /usr/share/X11/xkb
+rm -rf /lib64/X11/xkb
+ln -sfn /lib64/xkeyboard-config-2 /usr/share/X11/xkb
+ln -sfn /lib64/xkeyboard-config-2 /lib64/X11/xkb
