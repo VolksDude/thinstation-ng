@@ -1,0 +1,26 @@
+# iPXE network boot (x86)
+
+The default x86 build generates a standalone iPXE network-boot tree:
+
+`boot-images/ipxe/efi-source/`
+
+Serve this directory as both the TFTP root and HTTP document root.
+The `boot/ipxe/autoexec.ipxe` script retrieves the kernel and initrd
+over HTTP from DHCP's `next-server`.
+
+| Firmware | DHCP boot filename |
+| --- | --- |
+| BIOS | `boot/ipxe/undionly.kpxe` |
+| UEFI | `boot/ipxe/ipxe.efi` |
+| UEFI Secure Boot | `boot/ipxe/snponly-shim.efi` |
+
+Secure Boot requires the signed iPXE loader package. Fedora's signed
+shim is staged under `EFI/BOOT/BOOTX64.EFI` for the UEFI kernel handoff.
+
+After building, validate with `bash tests/verify-ipxe-output.sh`.
+QEMU modes `bt net`, `bt net-efi`, and `bt net-efi-secure`
+prefer the new tree, falling back to the legacy GRUB-staged tree.
+
+**This produces network boot files, not a bootable ISO or USB/HDD image.**
+For standalone local media, configure `param bootimages "grub"`
+in the active `build.conf`. ARM continues to default to U-Boot.
