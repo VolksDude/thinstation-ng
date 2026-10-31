@@ -367,7 +367,10 @@ bridge()
 
 setup_ipxe_netboot()
 {
-        IPXE_BOOT_ROOT="$BT_BUILD_ROOT/boot-images/grub/efi-source"
+        IPXE_BOOT_ROOT="$BT_BUILD_ROOT/boot-images/ipxe/efi-source"
+        if [ ! -f "$IPXE_BOOT_ROOT/boot/ipxe/autoexec.ipxe" ]; then
+                IPXE_BOOT_ROOT="$BT_BUILD_ROOT/boot-images/grub/efi-source"
+        fi
         IPXE_HTTP_PID=""
 
         case "$1" in
@@ -381,6 +384,11 @@ setup_ipxe_netboot()
                         IPXE_BOOTFILE=/boot/ipxe/snponly-shim.efi
                 ;;
         esac
+
+        if [ ! -f "$IPXE_BOOT_ROOT$IPXE_BOOTFILE" ]; then
+                echo "Missing $IPXE_BOOTFILE in $IPXE_BOOT_ROOT; build iPXE images first" >&2
+                exit 1
+        fi
 
         python3 -m http.server 80 --bind 0.0.0.0 \
                 --directory "$IPXE_BOOT_ROOT" \
