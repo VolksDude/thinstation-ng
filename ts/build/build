@@ -2262,7 +2262,7 @@ sys_copy()
 # Build the same network loader set for iPXE-only and legacy GRUB outputs.
 stage_ipxe()
 {
-	local ipxe_template="boot-images/templates/ipxe/\${ts_grubtheme}/autoexec.ipxe"
+	local ipxe_template="boot-images/templates/ipxe/${ts_grubtheme}/autoexec.ipxe"
 
 	if [ ! -f /usr/share/ipxe/undionly.kpxe ] || [ ! -f /usr/share/ipxe/ipxe-snponly-x86_64.efi ]; then
 		echo "Missing iPXE BIOS/UEFI boot loaders in /usr/share/ipxe" >&2
