@@ -9,4 +9,8 @@ if [ ! -f /usr/lib/systemd/system/wazuh-agent.service ] && [ ! -f /usr/lib64/sys
   echo "Missing wazuh-agent.service" >&2; exit 1
 fi
 rm -f /var/ossec/etc/client.keys
+chmod 0755 /usr/bin/thinstation-wazuh-configure
+mkdir -p /etc/wazuh-agent /var/ossec/etc
+# Set restrictive access on any runtime enrollment credentials.
+chmod 0700 /var/ossec/etc
 systemctl enable wazuh-agent.service || exit 1
