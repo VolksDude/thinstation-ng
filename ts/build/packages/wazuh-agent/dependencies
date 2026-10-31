@@ -1,0 +1,6 @@
+base
+systemd
+dbus
+openssl
+python3
+persistent-files

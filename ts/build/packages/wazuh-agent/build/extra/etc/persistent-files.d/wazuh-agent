@@ -1,0 +1,4 @@
+# Per-device enrollment identity. Requires /var/prstnt mount.
+/var/ossec/etc/client.keys
+/var/ossec/etc/ossec.conf
+/etc/wazuh-agent/manager.conf

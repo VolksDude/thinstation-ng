@@ -1,0 +1,28 @@
+#!/bin/sh
+# Extract the official signed Wazuh agent RPM without running RPM scriptlets.
+set -eu
+export PACKAGE="wazuh-agent"
+version="${WAZUH_AGENT_VERSION:-4.14.9}"
+release="${WAZUH_AGENT_RELEASE:-1}"
+arch="$(rpm --eval '%{_arch}')"
+case "$version:$release:$arch" in
+  *[!a-zA-Z0-9._:-]*) echo "Invalid Wazuh version/release/arch" >&2; exit 1 ;;
+esac
+filename="wazuh-agent-${version}-${release}.${arch}.rpm"
+install -d /build/wget_tmp
+rpmfile="/build/wget_tmp/$filename"
+keyfile="$(mktemp)"
+trap 'rm -f "$keyfile"' EXIT HUP INT TERM
+if [ ! -s "$rpmfile" ]; then
+  curl --fail --location --silent --show-error --retry 3 --output "$rpmfile" "https://packages.wazuh.com/4.x/yum/$filename"
+fi
+curl --fail --location --silent --show-error --retry 3 --output "$keyfile" "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+rpm --import "$keyfile"
+rpm -Kv "$rpmfile" | grep -qi 'signature.*OK' || {
+  echo "Wazuh agent RPM signature verification failed: $rpmfile" >&2
+  exit 1
+}
+export PORTS=""
+export RPM="$rpmfile"
+export DROP_FILES="" DROP_DIRS="" CREATE_EMPTY_DIRS=""
+repackage -e
