@@ -16,6 +16,28 @@ computer, open `https://THINCLIENT-IP:9090`. The first connection may
 show a browser warning for Cockpit's automatically generated certificate.
 Deploy a trusted certificate before production use.
 
+## Cockpit login (ThinStation build credentials)
+
+Log in to Cockpit using the local **tsuser** account and the password
+configured by `param tsuserpasswd` in the active build configuration.
+The image builder hashes that password into the local Unix account; Cockpit
+uses its dedicated PAM configuration and does not store a separate password.
+
+```text
+param tsuser       tsuser
+param tsuserpasswd YOUR_UNIQUE_STRONG_PASSWORD
+```
+
+**Important:** `param tsuserpasswd` is a shared image-wide credential.
+For 500 endpoints, anyone who knows it can potentially access every Cockpit
+console. Restrict TCP 9090 to your management VLAN/VPN, use a unique strong
+credential, and prefer per-device credentials or centralized authentication
+for a production fleet. Changing the build parameter requires building and
+deploying a new image (or changing the local password using a persistent
+identity mechanism). The build must contain PAM's `pam_unix.so`,
+`pam_succeed_if.so`, and `pam_nologin.so`; login and privileged
+operations still require runtime testing.
+
 **Security and prerequisites:**
 
 * Cockpit authenticates against the thin client's local PAM accounts.
