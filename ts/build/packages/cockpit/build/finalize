@@ -1,0 +1,8 @@
+#cockpit 85
+# The service is socket-activated and will run on demand at TCP 9090.
+# Enable it only when the administrator explicitly selected package cockpit.
+if [ ! -f /usr/lib/systemd/system/cockpit.socket ] && [ ! -f /usr/lib64/systemd/system/cockpit.socket ]; then
+    echo "Cockpit socket missing from image" >&2
+    exit 1
+fi
+systemctl enable cockpit.socket || exit 1
