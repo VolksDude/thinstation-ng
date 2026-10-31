@@ -2175,21 +2175,20 @@ image_fastboot()
 	fi
 }
 
-# Validate bootimages value
-if [ "$ts_bootimages" != "grub" ] && [ "$ts_bootimages" != "uboot" ]; then
-	if [ -n "$ts_bootimages" ]; then
-		echo "Warning: bootimages value '$ts_bootimages' is not supported. Only 'grub' and 'uboot' are valid."
-		echo "Defaulting to 'grub' for x86_64 or 'uboot' for ARM architectures."
-	fi
+# Default x86 builds to iPXE network boot. GRUB remains opt-in for
+# bootable CD/USB/HDD images; ARM targets continue to use U-Boot.
+if [ -z "$ts_bootimages" ]; then
 	case "$TARGET_ARCH" in
-		aarch64|armv7l)
-			ts_bootimages="uboot"
-			;;
-		*)
-			ts_bootimages="grub"
-			;;
+		aarch64|armv7l) ts_bootimages="uboot" ;;
+		*) ts_bootimages="ipxe" ;;
 	esac
 fi
+for bootimage in $ts_bootimages; do
+	case "$bootimage" in
+		ipxe|grub|uboot) ;;
+		*) echo "Unsupported bootimages value: $bootimage (valid: ipxe, grub, uboot)" >&2; exit 1 ;;
+	esac
+done
 
 if [ -z "$ts_grubtheme" ]; then
 	ts_grubtheme="default"
@@ -2260,6 +2259,37 @@ sys_copy()
 	fi
 }
 
+# Build the same network loader set for iPXE-only and legacy GRUB outputs.
+stage_ipxe()
+{
+	local ipxe_template="boot-images/templates/ipxe/\${ts_grubtheme}/autoexec.ipxe"
+
+	if [ ! -f /usr/share/ipxe/undionly.kpxe ] || [ ! -f /usr/share/ipxe/ipxe-snponly-x86_64.efi ]; then
+		echo "Missing iPXE BIOS/UEFI boot loaders in /usr/share/ipxe" >&2
+		return 1
+	fi
+	[ -f "$ipxe_template" ] || ipxe_template="boot-images/templates/ipxe/default/autoexec.ipxe"
+	[ -f "$ipxe_template" ] || { echo "Missing iPXE autoexec template" >&2; return 1; }
+
+	mkdir -p "$ESP/boot/ipxe"
+	sys_copy /usr/share/ipxe/undionly.kpxe "$ESP/boot/ipxe/undionly.kpxe"
+	sys_copy /usr/share/ipxe/ipxe-snponly-x86_64.efi "$ESP/boot/ipxe/ipxe.efi"
+	sys_copy "$ipxe_template" "$ESP/boot/ipxe/autoexec.ipxe"
+	sed -i -e "s/\$KERNEL_PARAMETERS/$KERNEL_PARAMETERS/g" "$ESP/boot/ipxe/autoexec.ipxe"
+
+	if [ -e /usr/share/ipxe/secureboot/snponly.efi ] && [ -e /usr/share/ipxe/secureboot/snponly-shim.efi ]; then
+		sys_copy /usr/share/ipxe/secureboot/snponly.efi "$ESP/boot/ipxe/snponly.efi"
+		# A FAT EFI partition cannot hold a symlink to shimx64.efi.
+		if [ ! -e "$ESP/boot/ipxe/snponly-shim.efi" ]; then
+			cp -L /usr/share/ipxe/secureboot/snponly-shim.efi "$ESP/boot/ipxe/snponly-shim.efi" || return 1
+			echo "$ESP/boot/ipxe/snponly-shim.efi" >> boot-images/initrd/added.files
+		fi
+		sys_copy /usr/share/ipxe/secureboot/shimx64.efi "$ESP/boot/ipxe/shimx64.efi"
+	else
+		echo "Warning: signed iPXE Secure Boot loaders are unavailable; Secure Boot PXE will not work" >&2
+	fi
+}
+
 wrap_efi()
 {
 	if is_enabled ${ts_wrap_efi:=enabled}; then
@@ -2277,28 +2307,7 @@ wrap_efi()
 		done
 		sys_copy /usr/share/grub/unicode.pf2 $ESP/boot/grub2/fonts/unicode.pf2
 
-		# Keep the iPXE loader set together under /boot/ipxe. BIOS uses a
-		# ThinStation build of undionly.kpxe with a generic embedded
-		# "chain autoexec.ipxe" bootstrap. UEFI remains Fedora-built and
-		# discovers autoexec.ipxe beside the loader.
-		mkdir -p $ESP/boot/ipxe
-		if [ -e /usr/share/ipxe/undionly.kpxe ] && [ -e /usr/share/ipxe/ipxe-snponly-x86_64.efi ]; then
-			sys_copy /usr/share/ipxe/undionly.kpxe $ESP/boot/ipxe/undionly.kpxe
-			sys_copy /usr/share/ipxe/ipxe-snponly-x86_64.efi $ESP/boot/ipxe/ipxe.efi
-			sys_copy boot-images/templates/ipxe/$ts_grubtheme/autoexec.ipxe $ESP/boot/ipxe/autoexec.ipxe
-			sed -i -e "s/\$KERNEL_PARAMETERS/$KERNEL_PARAMETERS/g" $ESP/boot/ipxe/autoexec.ipxe
-		fi
-		if [ -e /usr/share/ipxe/secureboot/snponly.efi ] && [ -e /usr/share/ipxe/secureboot/snponly-shim.efi ]; then
-			sys_copy /usr/share/ipxe/secureboot/snponly.efi $ESP/boot/ipxe/snponly.efi
-			# snponly-shim.efi may be a symlink to shimx64.efi in the Fedora
-			# package. The EFI staging image is FAT and cannot represent symlinks,
-			# so dereference it here and store a real file in efi-source.
-			if [ ! -e $ESP/boot/ipxe/snponly-shim.efi ]; then
-				cp -L /usr/share/ipxe/secureboot/snponly-shim.efi $ESP/boot/ipxe/snponly-shim.efi
-				echo "$ESP/boot/ipxe/snponly-shim.efi" | sed -E "s|/+|/|g" >> boot-images/initrd/added.files
-			fi
-			sys_copy /usr/share/ipxe/secureboot/shimx64.efi $ESP/boot/ipxe/shimx64.efi
-		fi
+		stage_ipxe || return 1
 
 		if is_enabled $ts_earlymicrocode ; then
 			sed -i -e "s:/boot/initrd:/boot/ucode /boot/initrd:" $ESP/boot/grub2/grub.cfg
@@ -2401,6 +2410,23 @@ if [ -z "$NOIMAGES" ]; then
                                         $ESP
 
                                 echo $ESP/../thinstation-efi.iso >> boot-images/initrd/added.files
+   ;;
+
+   ipxe)
+	ESP=boot-images/ipxe/efi-source
+	mkdir -p "$ESP"
+
+	# iPXE's UEFI boot script uses Fedora's signed shim to validate
+	# the Fedora kernel, without loading or packaging GRUB.
+	if [ ! -f /boot/efi/EFI/fedora/shimx64.efi ]; then
+		echo "Missing Fedora shimx64.efi (required by the iPXE UEFI boot script)" >&2
+		exit 1
+	fi
+	sys_copy /boot/efi/EFI/fedora/shimx64.efi "$ESP/EFI/BOOT/BOOTX64.EFI"
+	stage_ipxe || exit 1
+	add_image
+	add_overlay
+	addpkgs "$ESP"
    ;;
 
    uboot)
