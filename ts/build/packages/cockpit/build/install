@@ -1,0 +1,9 @@
+#!/bin/sh
+# Package the native Fedora Cockpit payload into the ThinStation image.
+set -eu
+export PACKAGE=cockpit
+export PORTS="cockpit-ws cockpit-bridge cockpit-system"
+export DROP_FILES=""
+export DROP_DIRS=""
+export CREATE_EMPTY_DIRS=""
+repackage -e
