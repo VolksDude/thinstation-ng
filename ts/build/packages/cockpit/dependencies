@@ -1,0 +1,7 @@
+base
+systemd
+dbus
+pam
+polkit
+openssl
+python3
