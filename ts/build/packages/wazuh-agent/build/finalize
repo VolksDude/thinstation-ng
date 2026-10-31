@@ -1,0 +1,12 @@
+#wazuh-agent 85
+# Do not register agents in the build chroot; each needs its own identity.
+getent group wazuh >/dev/null || groupadd -r wazuh
+getent passwd wazuh >/dev/null || useradd -r -g wazuh -d /var/ossec -s /sbin/nologin wazuh
+if [ ! -x /var/ossec/bin/wazuh-control ]; then
+  echo "Missing Wazuh agent binary" >&2; exit 1
+fi
+if [ ! -f /usr/lib/systemd/system/wazuh-agent.service ] && [ ! -f /usr/lib64/systemd/system/wazuh-agent.service ]; then
+  echo "Missing wazuh-agent.service" >&2; exit 1
+fi
+rm -f /var/ossec/etc/client.keys
+systemctl enable wazuh-agent.service || exit 1
