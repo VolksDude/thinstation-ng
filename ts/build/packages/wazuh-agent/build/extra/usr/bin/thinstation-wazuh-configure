@@ -1,66 +1,134 @@
 #!/usr/bin/python3
-"""Configure manager and first-boot enrollment without reusing endpoint identities."""
+"""Configure Wazuh from ThinStation's boot-time network configuration.
+
+The HTTP-delivered configuration is accumulated into /etc/thinstation.network
+by network-files.service. Only the two Wazuh assignment keys are parsed,
+without sourcing or executing a remotely served shell script.
+"""
+import ipaddress
 import os
 import re
+import shlex
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-def main():
-    manager = os.environ.get("WAZUH_MANAGER", "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,252}", manager):
-        sys.exit("Invalid or missing WAZUH_MANAGER in manager.conf")
-    config = Path("/var/ossec/etc/ossec.conf")
+SETTING = re.compile(r"^\s*(?:export\s+)?(WAZUH_MANAGER|WAZUH_CA_PATH)\s*=\s*(.*)$")
+DEFAULT_SOURCES = (
+    Path("/etc/wazuh-agent/manager.conf"),  # legacy image/host override
+    Path("/thinstation.buildtime"),          # baked-in optional fallback
+    Path("/etc/thinstation.network"),        # HTTP config wins at each boot
+)
+
+
+def read_settings(sources=DEFAULT_SOURCES):
+    settings = {}
+    for source in sources:
+        if not source.is_file():
+            continue
+        for lineno, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+            match = SETTING.match(line)
+            if not match:
+                continue
+            key, raw = match.groups()
+            try:
+                parts = shlex.split(raw, comments=True, posix=True)
+            except ValueError as exc:
+                raise ValueError(f"{source}:{lineno}: invalid {key} assignment: {exc}") from exc
+            if len(parts) != 1:
+                raise ValueError(f"{source}:{lineno}: {key} must contain one literal value")
+            settings[key] = parts[0]
+    return settings
+
+
+def check_manager(value):
+    value = value.strip()
+    if not value:
+        raise ValueError("Missing WAZUH_MANAGER (set it in the HTTP thinstation config)")
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
+        pass
+    if len(value) > 253 or not all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+        for label in value.rstrip(".").split(".")
+    ):
+        raise ValueError("WAZUH_MANAGER must be a valid IP address or DNS hostname")
+    return value
+
+
+def update_agent_config(config, manager, ca_path=None):
+    manager = check_manager(manager)
+    if ca_path:
+        ca = Path(ca_path)
+        if not ca.is_absolute() or not ca.is_file():
+            raise ValueError("WAZUH_CA_PATH must be an existing absolute file path")
     if not config.is_file():
-        sys.exit("Missing Wazuh agent ossec.conf")
-    tree = ET.parse(config)
+        raise ValueError(f"Missing Wazuh agent configuration: {config}")
+    original = config.read_bytes()
+    tree = ET.ElementTree(ET.fromstring(original))
     root = tree.getroot()
+    if root.tag != "ossec_config":
+        raise ValueError(f"Unexpected Wazuh config root: {root.tag}")
     client = root.find("client")
     if client is None:
         client = ET.SubElement(root, "client")
     server = client.find("server")
     if server is None:
         server = ET.SubElement(client, "server")
-    address = server.find("address")
-    if address is None:
-        address = ET.SubElement(server, "address")
-    address.text = manager
-    protocol = server.find("protocol")
-    if protocol is None:
-        protocol = ET.SubElement(server, "protocol")
-    protocol.text = "tcp"
+    for name, value in (("address", manager), ("protocol", "tcp")):
+        item = server.find(name)
+        if item is None:
+            item = ET.SubElement(server, name)
+        item.text = value
     enrollment = client.find("enrollment")
     if enrollment is None:
         enrollment = ET.SubElement(client, "enrollment")
-    enabled = enrollment.find("enabled")
-    if enabled is None:
-        enabled = ET.SubElement(enrollment, "enabled")
-    enabled.text = "yes"
-    manager_address = enrollment.find("manager_address")
-    if manager_address is None:
-        manager_address = ET.SubElement(enrollment, "manager_address")
-    manager_address.text = manager
-    ca = os.environ.get("WAZUH_CA_PATH", "").strip()
-    if ca:
-        if not Path(ca).is_file():
-            sys.exit("WAZUH_CA_PATH does not exist")
-        server_ca = enrollment.find("server_ca_path")
-        if server_ca is None:
-            server_ca = ET.SubElement(enrollment, "server_ca_path")
-        server_ca.text = ca
-    old_mode = config.stat().st_mode & 0o777
-    tmp = config.with_name("ossec.conf.tmp")
+    for name, value in (("enabled", "yes"), ("manager_address", manager)):
+        item = enrollment.find(name)
+        if item is None:
+            item = ET.SubElement(enrollment, name)
+        item.text = value
+    if ca_path:
+        item = enrollment.find("server_ca_path")
+        if item is None:
+            item = ET.SubElement(enrollment, "server_ca_path")
+        item.text = ca_path
+    updated = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    if updated == original:
+        return False
+    info = config.stat()
+    tmp = config.with_name(config.name + ".tmp")
     try:
-        tree.write(tmp, encoding="unicode", xml_declaration=True)
-        os.chmod(tmp, old_mode)
+        with tmp.open("wb") as stream:
+            stream.write(updated)
+        os.chmod(tmp, info.st_mode & 0o777)
+        os.chown(tmp, info.st_uid, info.st_gid)
         os.replace(tmp, config)
     finally:
         tmp.unlink(missing_ok=True)
+    return True
+
+
+def main():
+    try:
+        values = read_settings()
+        manager = check_manager(values.get("WAZUH_MANAGER", ""))
+        update_agent_config(
+            Path("/var/ossec/etc/ossec.conf"),
+            manager,
+            values.get("WAZUH_CA_PATH"),
+        )
+    except (OSError, ValueError, ET.ParseError) as exc:
+        sys.exit(f"Wazuh configuration error: {exc}")
+    print(f"Wazuh manager from ThinStation configuration: {manager}")
     identity = Path("/var/ossec/etc/client.keys")
     if identity.is_file() and identity.stat().st_size:
-        print("Existing Wazuh agent identity will be reused")
+        print("Reusing existing per-device Wazuh enrollment identity")
     else:
-        print("No agent identity; Wazuh enrollment will be required")
+        print("No Wazuh identity exists; agent must enroll with the manager")
+
 
 if __name__ == "__main__":
     main()

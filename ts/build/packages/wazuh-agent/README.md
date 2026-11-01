@@ -1,5 +1,32 @@
 # Wazuh endpoint agent for ThinStation
 
+## Runtime HTTP configuration (no image rebuild)
+
+For endpoints already built with this package, set the manager in the
+HTTP-served ThinStation global network configuration (normally
+`thinstation.conf.network`):
+
+```ini
+WAZUH_MANAGER=192.0.2.50
+```
+
+ThinStation downloads and combines its network/group/host config into
+`/etc/thinstation.network` during boot. Wazuh waits for
+`network-files.service` and reads the resulting file each boot.
+A host/group override can supersede the global setting, following
+ThinStation's normal config precedence. A change to the HTTP file takes
+effect after the endpoint next boots (or after redeploying the downloaded
+config and restarting the agent); no image rebuild is required.
+
+An optional `/etc/wazuh-agent/manager.conf` or baked-in
+`/thinstation.buildtime` value acts as a fallback. The HTTP value wins.
+Never put secrets or enrollment passwords in HTTP-served config files.
+Existing per-device `/var/ossec/etc/client.keys` are retained; changing
+the manager requires corresponding agent registration/identity on the new
+manager, or a secure re-enrollment process. The client must have
+`/var/prstnt` mounted to preserve its identity.
+
+
 This is the endpoint agent, **not** the existing `package wazuh`
 (which deploys a Docker-based Wazuh server).
 
