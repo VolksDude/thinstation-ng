@@ -1,4 +1,4 @@
-# Copy to manager.conf during a custom build or provision at boot.
-# Do not store enrollment passwords in this file.
+# Optional fallback when the HTTP ThinStation config has no Wazuh manager.
+# Prefer putting WAZUH_MANAGER in your HTTP-served thinstation.conf.network.
 WAZUH_MANAGER=wazuh.internal.example
 # WAZUH_CA_PATH=/etc/wazuh-agent/manager-ca.pem
