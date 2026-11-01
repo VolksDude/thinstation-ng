@@ -1,30 +1,43 @@
 # Wazuh endpoint agent for ThinStation
 
-## Runtime HTTP configuration (no image rebuild)
+## Diskless PXE clients: runtime hostname and automatic enrollment
 
-For endpoints already built with this package, set the manager in the
-HTTP-served ThinStation global network configuration (normally
-`thinstation.conf.network`):
+This package supports clients with **no persistent local storage**.
+The agent waits for ThinStation's HTTP network configuration, then reads
+the Wazuh Manager address and assigned hostname at every boot.
+
+On the HTTP configuration server, in `thinstation.conf.network` or the
+appropriate per-host/per-group file, configure:
 
 ```ini
+NET_HOSTNAME=TC-001
 WAZUH_MANAGER=192.0.2.50
 ```
 
-ThinStation downloads and combines its network/group/host config into
-`/etc/thinstation.network` during boot. Wazuh waits for
-`network-files.service` and reads the resulting file each boot.
-A host/group override can supersede the global setting, following
-ThinStation's normal config precedence. A change to the HTTP file takes
-effect after the endpoint next boots (or after redeploying the downloaded
-config and restarting the agent); no image rebuild is required.
+A dynamic hostname supplied by ThinStation is used when NET_HOSTNAME is
+unspecified or contains a wildcard. Wazuh's enrollment agent_name is set
+to this hostname. The agent will automatically attempt to enroll if
+`/var/ossec/etc/client.keys` is absent; it does not require `/var/prstnt`.
 
-An optional `/etc/wazuh-agent/manager.conf` or baked-in
-`/thinstation.buildtime` value acts as a fallback. The HTTP value wins.
-Never put secrets or enrollment passwords in HTTP-served config files.
-Existing per-device `/var/ossec/etc/client.keys` are retained; changing
-the manager requires corresponding agent registration/identity on the new
-manager, or a secure re-enrollment process. The client must have
-`/var/prstnt` mounted to preserve its identity.
+**Important: same hostname is NOT the same agent identity.** Diskless
+clients lose their Wazuh authentication key every reboot. Re-enrollment
+can create a new manager-assigned agent ID, produce duplicate entries,
+or fail due to a duplicate name, according to server configuration.
+The manager must explicitly permit controlled re-enrollment/replacement.
+This behavior has not been qualified on a live Wazuh manager.
+Never assume agent ID or historical continuity is preserved.
+
+For a guaranteed stable ID and history, implement a separate secure,
+per-device key/identity service authenticated independently of the
+spoofable hostname/MAC address. The existing agent package does not
+implement such a service.
+
+Do not expose an unauthenticated enrollment port or distribute a common
+enrollment password through HTTP configuration. Deploy TLS-authenticated
+manager enrollment, network restrictions, and monitored enrollment rates.
+Use a trusted manager CA where supported. Once the image with this feature
+is deployed, changing WAZUH_MANAGER in HTTP config does not require
+rebuilding the image; a reboot applies the new setting.
 
 
 This is the endpoint agent, **not** the existing `package wazuh`
@@ -52,12 +65,10 @@ Use TLS verification and manager enrollment authorization in production.
 Store any enrollment password at `/var/ossec/etc/authd.pass`
 with mode 0600 via a secure enrollment process, not Git or a shared image.
 
-The agent service is conditioned on `/var/prstnt` being a mounted
-persistent volume. The `persistent-files` package is required
-to preserve enrollment identity and agent configuration across boots.
-Validate that your image restores the identity before the service starts.
-Default password or insecure open enrollment is not appropriate for
-a deployment of 500 devices.
+Persistent storage is optional; a diskless agent automatically attempts
+enrollment each boot when its key is missing. If persistence is present,
+the optional persistent-files configuration can retain the agent key.
+Repeated enrollment may create a new Wazuh ID; see the warning above.
 
 Check service: `systemctl status wazuh-agent`.
 Review logs: `journalctl -u wazuh-agent -b`.
