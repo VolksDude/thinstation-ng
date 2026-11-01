@@ -1,4 +1,5 @@
-# Per-device enrollment identity. Requires /var/prstnt mount.
+# Optional only: diskless clients do not need persistent-files.
+# For clients with optional persistent storage, retain the enrollment identity.
 /var/ossec/etc/client.keys
 /var/ossec/etc/ossec.conf
 /etc/wazuh-agent/manager.conf
