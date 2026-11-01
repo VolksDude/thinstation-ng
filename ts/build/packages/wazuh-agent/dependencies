@@ -3,5 +3,4 @@ systemd
 dbus
 openssl
 python3
-persistent-files
 netfiles
