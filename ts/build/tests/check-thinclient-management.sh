@@ -11,7 +11,9 @@ grep -qx cockpit "$root/packages/thinclient-management/dependencies"
 grep -qx wazuh-agent "$root/packages/thinclient-management/dependencies"
 grep -q "cockpit-ws" "$root/packages/cockpit/build/install"
 grep -q "wazuh-agent" "$root/packages/wazuh-agent/build/install"
-grep -q "ConditionPathIsMountPoint=/var/prstnt" "$root/packages/wazuh-agent/build/extra/etc/systemd/system/wazuh-agent.service.d/thinstation.conf"
+if grep -q "ConditionPathIsMountPoint=/var/prstnt" "$root/packages/wazuh-agent/build/extra/etc/systemd/system/wazuh-agent.service.d/thinstation.conf"; then
+  echo "Diskless Wazuh agents must not require /var/prstnt" >&2; exit 1
+fi
 grep -qx /var/ossec/etc/client.keys "$root/packages/wazuh-agent/build/extra/etc/persistent-files.d/wazuh-agent"
 grep -qx /var/ossec/etc "$root/packages/wazuh-agent/build/extra/etc/persistent-dirs.d/wazuh-agent"
 for file in "$root/packages/wazuh-agent/build/install" "$root/packages/wazuh-agent/build/remove"; do bash -n "$file"; done
