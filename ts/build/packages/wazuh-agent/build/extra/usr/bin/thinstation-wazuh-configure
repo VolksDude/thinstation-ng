@@ -2,18 +2,19 @@
 """Configure Wazuh from ThinStation's boot-time network configuration.
 
 The HTTP-delivered configuration is accumulated into /etc/thinstation.network
-by network-files.service. Only the two Wazuh assignment keys are parsed,
+by network-files.service. Only the Wazuh and hostname assignment keys are parsed,
 without sourcing or executing a remotely served shell script.
 """
 import ipaddress
 import os
 import re
 import shlex
+import socket
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-SETTING = re.compile(r"^\s*(?:export\s+)?(WAZUH_MANAGER|WAZUH_CA_PATH)\s*=\s*(.*)$")
+SETTING = re.compile(r"^\s*(?:export\s+)?(WAZUH_MANAGER|WAZUH_CA_PATH|NET_HOSTNAME)\s*=\s*(.*)$")
 DEFAULT_SOURCES = (
     Path("/etc/wazuh-agent/manager.conf"),  # legacy image/host override
     Path("/thinstation.buildtime"),          # baked-in optional fallback
@@ -58,7 +59,25 @@ def check_manager(value):
     return value
 
 
-def update_agent_config(config, manager, ca_path=None):
+
+def check_agent_name(name):
+    """Only accept real, unique ThinStation hostnames, never placeholders."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{1,127}", name):
+        raise ValueError("ThinStation hostname is not a valid Wazuh agent name")
+    if name.lower() in ("localhost", "localhost.localdomain", "none", "thinstation"):
+        raise ValueError("ThinStation hostname is not uniquely assigned")
+    return name
+
+
+def select_agent_name(values, current_hostname=None):
+    """Prefer the explicit HTTP host assignment; otherwise use OS hostname."""
+    configured = values.get("NET_HOSTNAME", "").strip()
+    if configured and "*" not in configured:
+        return check_agent_name(configured)
+    return check_agent_name(current_hostname or socket.gethostname())
+
+
+def update_agent_config(config, manager, ca_path=None, agent_name=None):
     manager = check_manager(manager)
     if ca_path:
         ca = Path(ca_path)
@@ -90,6 +109,11 @@ def update_agent_config(config, manager, ca_path=None):
         if item is None:
             item = ET.SubElement(enrollment, name)
         item.text = value
+    if agent_name:
+        item = enrollment.find("agent_name")
+        if item is None:
+            item = ET.SubElement(enrollment, "agent_name")
+        item.text = check_agent_name(agent_name)
     if ca_path:
         item = enrollment.find("server_ca_path")
         if item is None:
@@ -115,19 +139,22 @@ def main():
     try:
         values = read_settings()
         manager = check_manager(values.get("WAZUH_MANAGER", ""))
+        agent_name = select_agent_name(values)
         update_agent_config(
             Path("/var/ossec/etc/ossec.conf"),
             manager,
             values.get("WAZUH_CA_PATH"),
+            agent_name=agent_name,
         )
     except (OSError, ValueError, ET.ParseError) as exc:
         sys.exit(f"Wazuh configuration error: {exc}")
     print(f"Wazuh manager from ThinStation configuration: {manager}")
+    print(f"Wazuh agent name from ThinStation hostname: {agent_name}")
     identity = Path("/var/ossec/etc/client.keys")
     if identity.is_file() and identity.stat().st_size:
         print("Reusing existing per-device Wazuh enrollment identity")
     else:
-        print("No Wazuh identity exists; agent must enroll with the manager")
+        print("Diskless agent has no key; Wazuh automatic enrollment will be attempted")
 
 
 if __name__ == "__main__":
