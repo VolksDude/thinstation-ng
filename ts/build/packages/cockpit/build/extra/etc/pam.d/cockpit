@@ -1,0 +1,15 @@
+#%PAM-1.0
+# ThinStation builds the unprivileged tsuser (UID 1000) with the hashed
+# password from "param tsuserpasswd" in build.conf. Let pam_unix authenticate
+# against the normal local Unix credentials; never embed a second password.
+#
+# On this appliance Fedora's stock password-auth/postlogin includes may not
+# exist, so using them here would reject even the correct ThinStation password.
+# Only the ThinStation account (UID 1000) can log in to Cockpit; root is denied.
+auth     requisite  pam_nologin.so
+auth     requisite  pam_succeed_if.so uid = 1000 quiet
+auth     required   pam_unix.so
+account  requisite  pam_succeed_if.so uid = 1000 quiet
+account  required   pam_unix.so
+session  required   pam_unix.so
+session  optional   pam_systemd.so

@@ -1,0 +1,4 @@
+# Optional fallback when the HTTP ThinStation config has no Wazuh manager.
+# Prefer putting WAZUH_MANAGER in your HTTP-served thinstation.conf.network.
+WAZUH_MANAGER=wazuh.internal.example
+# WAZUH_CA_PATH=/etc/wazuh-agent/manager-ca.pem
