@@ -1,7 +1,16 @@
 #!/bin/sh
 
+# The gvfs-archive subpackage was dropped from gvfs (deprecated and disabled
+# upstream) before Fedora 45, so only request it when the configured
+# repositories still provide a package of exactly that name.
+archive=""
+if dnf -q repoquery --available --queryformat '%{name}\n' gvfs-archive 2>/dev/null |
+	grep -qx gvfs-archive; then
+	archive="gvfs-archive"
+fi
+
 export PACKAGE=glib
-export PORTS="glib glib-networking gvfs gvfs-archive gvfs-client gvfs-goa gvfs-mtp dconf gsettings-desktop-schemas"
+export PORTS="glib glib-networking gvfs $archive gvfs-client gvfs-goa gvfs-mtp dconf gsettings-desktop-schemas"
 export DROP_FILES="gio-querymodule gtester gtester-report gresource gobject-query glib-mkenums glib-gettextize glib-genmarshal glib-compile-resources gdbus-codegen dconf-editor"
 export DROP_DIRS="usr/lib64/gtk-doc usr/lib64/vala etc/profile.d usr/lib64/gdb usr/lib64/gdbus-2.0 usr/lib64/bash-completion usr/lib64/glib-2.0/gdb usr/lib64/glib-2.0/gettext usr/lib64/glib-2.0/include usr/share/locale"
 export CREATE_EMPTY_DIRS="lib64/gvfs/remote-volume-monitors"
