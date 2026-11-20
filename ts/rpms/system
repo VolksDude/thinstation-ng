@@ -1,4 +1,5 @@
 ImageMagick
+btop
 cmake
 cups-devel
 dbus-devel
@@ -13,6 +14,7 @@ glib2-devel
 glibc-locale-source
 glx-utils
 heimdal-libs
+htop
 inotify-tools
 iw
 jq
@@ -44,8 +46,10 @@ squashfs-tools
 strace
 tar
 tigervnc-server-minimal
+tree
 usbutils
 util-linux-core
+vim-enhanced
 vmtouch
 wget
 which
