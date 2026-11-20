@@ -1,7 +1,16 @@
 #!/bin/sh
 
+# gdk-pixbuf2-modules-extra (BMP/ICO/XPM/... loaders) was folded into
+# gdk-pixbuf2 and removed from the repositories in Fedora 45, so only request it
+# when the configured repositories still provide a package of exactly that name.
+extra=""
+if dnf -q repoquery --available --queryformat '%{name}\n' gdk-pixbuf2-modules-extra 2>/dev/null |
+	grep -qx gdk-pixbuf2-modules-extra; then
+	extra="gdk-pixbuf2-modules-extra"
+fi
+
 export PACKAGE=gdk-pixbuf
-export PORTS="gdk-pixbuf2 gdk-pixbuf2-xlib gdk-pixbuf2-modules-extra"
+export PORTS="gdk-pixbuf2 gdk-pixbuf2-xlib $extra"
 export DROP_DIRS=""
 export DROP_FILES="gdk-pixbuf-csource gdk-pixbuf-query-loaders gdk-pixbuf-query-loaders-64 gdk-pixbuf-register gdk-pixbuf-pixdata"
 
