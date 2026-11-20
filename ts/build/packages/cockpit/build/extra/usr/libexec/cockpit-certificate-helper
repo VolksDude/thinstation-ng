@@ -1,0 +1,120 @@
+#!/usr/bin/bash
+# ThinStation replacement for Cockpit's cockpit-certificate-helper.
+#
+# The upstream script calls "mkdir -pZ" and "mv -Z".  On a ThinStation image
+# the userland is BusyBox with SELinux disabled, and BusyBox's mkdir aborts
+# with "mkdir: SELinux is disabled" (exit 1) as soon as -Z is used.  That made
+# cockpit-certificate-ensure fail, so cockpit.service never started.
+#
+# This version keeps the same contract as upstream "selfsign":
+#   - writes 0-self-signed.cert (world-readable) and 0-self-signed.key into
+#     /etc/cockpit/ws-certs.d, using sscg when present, otherwise openssl
+#   - refuses to continue if a key exists without a certificate
+# and drops everything that needs SELinux or non-BusyBox behaviour.
+# Only the "selfsign" subcommand is supported (no IPA integration).
+
+set -eu
+
+COCKPIT_WS_CERTS_D="/etc/cockpit/ws-certs.d"
+COCKPIT_RUNTIME_DIR="/run/cockpit"
+
+# Cockpit renews up to 30 days before expiry, so give a year plus 30 days.
+# Browsers reject certificates valid for much longer than 397 days.
+DAYS=395
+
+CERTFILE="0-self-signed.cert"
+KEYFILE="0-self-signed.key"
+CA_FILE="0-self-signed-ca.pem"
+
+MACHINE_ID=""
+if [ -r /etc/machine-id ]; then
+    MACHINE_ID="$(tr -d -c '[:xdigit:]' < /etc/machine-id || true)"
+fi
+NAME="$(hostname 2>/dev/null || true)"
+[ -n "$NAME" ] || NAME="localhost"
+
+selfsign_sscg() {
+    command -v sscg >/dev/null 2>&1 || return 1
+    sscg --quiet \
+        --lifetime "${DAYS}" \
+        --cert-key-file "${KEYFILE}" \
+        --cert-file "${CERTFILE}" \
+        --ca-file "${CA_FILE}" \
+        --hostname "${NAME}" \
+        --organization "${MACHINE_ID:-unspecified}" \
+        --subject-alt-name localhost \
+        --subject-alt-name IP:127.0.0.1/255.255.255.255
+}
+
+selfsign_openssl() {
+    openssl req -x509 \
+        -days "${DAYS}" \
+        -newkey rsa:2048 \
+        -keyout "${KEYFILE}" \
+        -keyform PEM \
+        -nodes \
+        -out "${CERTFILE}" \
+        -outform PEM \
+        -subj "${MACHINE_ID:+/O=${MACHINE_ID}}/CN=${NAME}" \
+        -addext "subjectAltName=IP:127.0.0.1,DNS:localhost" \
+        -addext "basicConstraints = critical,CA:TRUE" \
+        -addext "keyUsage = critical,digitalSignature,cRLSign,keyCertSign,keyEncipherment,keyAgreement" \
+        -addext "extendedKeyUsage = serverAuth"
+}
+
+install_file() {
+    mv "$1" "${COCKPIT_WS_CERTS_D}/$1"
+}
+
+cmd_selfsign() {
+    # Do not stomp over a partial key -- the admin tried to do something wrong.
+    if [ -e "${COCKPIT_WS_CERTS_D}/${KEYFILE}" ] && [ ! -e "${COCKPIT_WS_CERTS_D}/${CERTFILE}" ]; then
+        echo "Error: Found ${KEYFILE} but no ${CERTFILE}. Please remove the key file first." >&2
+        exit 1
+    fi
+
+    mkdir -p "${COCKPIT_WS_CERTS_D}"
+
+    # If sscg is missing or fails, fall back to openssl.
+    selfsign_sscg || selfsign_openssl
+
+    # The CA file is only created by sscg.
+    if [ -e "${CA_FILE}" ]; then
+        install_file "${CA_FILE}"
+        chmod a+r "${COCKPIT_WS_CERTS_D}/${CA_FILE}"
+    fi
+    install_file "${CERTFILE}"
+    chmod a+r "${COCKPIT_WS_CERTS_D}/${CERTFILE}"
+    install_file "${KEYFILE}"
+
+    # Flush to disk for devices with persistent storage.
+    sync || true
+}
+
+main() {
+    if [ "$(id -u)" != "0" ]; then
+        echo 'must be run as root' >&2
+        exit 1
+    fi
+
+    case "${1:-}" in
+        selfsign) ;;
+        *)
+            echo "unsupported subcommand: ${1:-}" >&2
+            exit 1
+            ;;
+    esac
+
+    # Private working directory; mktemp so a leftover from an earlier failed
+    # run can never make the next start fail.
+    mkdir -p "${COCKPIT_RUNTIME_DIR}"
+    WORKDIR="$(mktemp -d "${COCKPIT_RUNTIME_DIR}/certificate-helper.XXXXXX")"
+    trap 'exit' INT QUIT PIPE TERM
+    trap 'rm -rf "${WORKDIR}"' EXIT
+    chmod 700 "${WORKDIR}"
+    cd "${WORKDIR}"
+
+    cmd_selfsign
+}
+
+main "$@"
