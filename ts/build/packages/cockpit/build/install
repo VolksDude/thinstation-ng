@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Cockpit web console: browser-based management of the endpoint on port 9090.
+#   cockpit-ws      web service (HTTPS on 9090, socket activated)
+#   cockpit-bridge  runs commands/reads system state on behalf of the browser
+#   cockpit-system  Overview (hardware/BIOS, uptime), Logs, Services, Terminal,
+#                   Accounts and the reboot / power off controls
+#   dmidecode       BIOS/SMBIOS details
+#   pciutils        lspci, used for the hardware details view
+# glib-networking (TLS support for cockpit-ws) is already provided by the glib
+# package, which this package depends on.
+#
+# To add more Cockpit pages, append the matching RPM here, for example
+# cockpit-networkmanager or cockpit-storaged.
+
+export PACKAGE=cockpit
+export PORTS="cockpit-ws cockpit-bridge cockpit-system dmidecode pciutils"
+repackage -e
+
+returnval=$?
+
+exit $returnval

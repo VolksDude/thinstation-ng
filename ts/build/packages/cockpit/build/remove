@@ -1,0 +1,4 @@
+#!/bin/sh
+
+export PACKAGE=cockpit
+repackage -c

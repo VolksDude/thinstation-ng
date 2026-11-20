@@ -1,0 +1,7 @@
+#cockpit 60
+
+# Start the Cockpit web service on demand (TCP 9090) once the image boots.
+systemctl enable cockpit.socket
+
+# The sudoers drop-in must not be group/world readable or sudo ignores it.
+chmod 0440 /etc/sudoers.d/cockpit
