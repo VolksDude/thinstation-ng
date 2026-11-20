@@ -1,7 +1,16 @@
 #!/bin/sh
 
+# The gcrypt backend was deprecated in xmlsec1 1.2.x and is not available in the
+# xmlsec1 1.3 packages of Fedora 45, so only request it when the configured
+# repositories still provide a package of exactly that name.
+gcrypt=""
+if dnf -q repoquery --available --queryformat '%{name}\n' xmlsec1-gcrypt 2>/dev/null |
+	grep -qx xmlsec1-gcrypt; then
+	gcrypt="xmlsec1-gcrypt"
+fi
+
 export PACKAGE="xmlsec1"
-export PORTS="xmlsec1 xmlsec1-gcrypt xmlsec1-gnutls xmlsec1-nss xmlsec1-openssl"
+export PORTS="xmlsec1 $gcrypt xmlsec1-gnutls xmlsec1-nss xmlsec1-openssl"
 export DROP_FILES=""
 export DROP_DIRS=""
 export CREATE_EMPTY_DIRS=""
