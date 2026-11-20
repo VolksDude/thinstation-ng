@@ -52,6 +52,36 @@ import_trusted_rpm_keys()
 	done
 }
 
+# Enable the RPM Fusion free and nonfree repositories by installing the
+# official release packages for the chroot's Fedora version. Set
+# ENABLE_RPMFUSION=false to skip. A failure is reported but does not abort the
+# chroot setup, since no base package set depends on these repositories.
+enable_rpmfusion()
+{
+	local flavor key
+	local -a urls=()
+
+	[ "${ENABLE_RPMFUSION:-true}" = "true" ] || return 0
+
+	for flavor in free nonfree; do
+		rpm -q "rpmfusion-$flavor-release" >/dev/null 2>&1 && continue
+		urls+=("https://download1.rpmfusion.org/$flavor/fedora/rpmfusion-$flavor-release-$DIST_VER.noarch.rpm")
+	done
+
+	[ "${#urls[@]}" -gt 0 ] || return 0
+
+	echo "Enabling RPM Fusion repositories for Fedora $DIST_VER"
+	if ! dnf_install "${urls[@]}"; then
+		echo "WARNING: could not enable the RPM Fusion repositories; continuing without them" >&2
+		return 0
+	fi
+
+	for key in /etc/pki/rpm-gpg/RPM-GPG-KEY-rpmfusion-*-fedora-"$DIST_VER"; do
+		[ -f "$key" ] || continue
+		rpm --import "$key"
+	done
+}
+
 read_port_list()
 {
 	grep -v '^[[:space:]]*#' "$1" | sed ':a;N;$!ba;s/\n/ /g'
@@ -175,6 +205,7 @@ stage2()
 	import_trusted_rpm_keys
 	cp -a /ts/repos/* /etc/yum.repos.d/.
 	import_trusted_rpm_keys
+	enable_rpmfusion
 	dnf_makecache
 	dnf_install --allowerasing $ts_ports #$other_ports
 
