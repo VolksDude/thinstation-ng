@@ -1,0 +1,9 @@
+base
+systemd
+dbus
+polkit
+pam
+python3
+glib
+openssl
+sudo

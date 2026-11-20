@@ -255,6 +255,7 @@ package locale-en_US         # English (US)
 #package dnsmasq              # DNS and DHCP server
 #package sshd                 # Secure shell server for remote login using dropbear
 #package openssh              # Secure shell server for remote login using openssh
+#package cockpit              # Web console for remote management (BIOS, uptime, reboot, logs) on HTTPS port 9090
 
 ####################
 ### --- Xorg --- ###
