@@ -1411,6 +1411,39 @@ if [  -e $PACDIR/tsadminpasswd.param ]; then
     echo "tsadmin:x:42:tsadmin" >> ./tmp-tree/etc/group
 fi
 
+# Dedicated account for the Cockpit web console (package cockpit).  It is the
+# only account allowed to log in to Cockpit and the one that gets administrative
+# access there (see the package's finalize).  Only the password hash goes into
+# the image; the name is passed on through thinstation.env.
+if [ -e $PACDIR/cockpit.package ]; then
+    if [ -z "$ts_cockpituser" ]; then
+        echo "WARNING: package cockpit is enabled but 'param cockpituser' is not set; nobody will be able to log in to Cockpit"
+    else
+        if ! echo "$ts_cockpituser" | grep -q -E '^[a-z_][a-z0-9_-]{0,31}$'; then
+            echo "ERROR: param cockpituser '$ts_cockpituser' is not a valid account name (lower case letters, digits, '_' and '-', starting with a letter or '_')"
+            exit 1
+        fi
+        if cut -d: -f1 ./tmp-tree/etc/passwd | grep -q -x -F "$ts_cockpituser" \
+        || [ "$ts_cockpituser" = "$ts_tsuser" ] || [ "$ts_cockpituser" = "tsuser" ]; then
+            echo "ERROR: param cockpituser '$ts_cockpituser' is already used by another account; pick a different name"
+            exit 1
+        fi
+        if [ -z "$ts_cockpituserpasswd" ]; then
+            echo "WARNING: 'param cockpituserpasswd' is not set; the Cockpit account '$ts_cockpituser' is locked"
+            GETPASSWD="!!"
+        elif [ "$ts_cockpituserpasswd" == "!!" ]; then
+            GETPASSWD="!!"
+        elif is_enabled $ts_sha512passwd; then
+            GETPASSWD=`mkpasswd -m sha512crypt "$ts_cockpituserpasswd"`
+        else
+            GETPASSWD=`mkpasswd -m md5 "$ts_cockpituserpasswd" 2>/dev/null || mkpasswd -m sha512crypt "$ts_cockpituserpasswd"`
+        fi
+        echo "$ts_cockpituser:$GETPASSWD:1001:1001:Cockpit administrator:/home/$ts_cockpituser:/bin/bash" >> ./tmp-tree/etc/passwd
+        echo "$ts_cockpituser:x:1001:$ts_cockpituser" >> ./tmp-tree/etc/group
+        echo "COCKPITUSER=$ts_cockpituser" >> ./tmp-tree/etc/thinstation.env
+    fi
+fi
+
 if [  -e $PACDIR/rootpasswd.param ]; then
     if [ "$ts_rootpasswd" == "!!" ]; then
         GETPASSWD="!!"
