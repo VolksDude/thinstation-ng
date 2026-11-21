@@ -1,3 +1,0 @@
-# Cockpit's "Administrative access" switch uses sudo with the logged-in user's
-# own password. Members of the sudo group (the ThinStation user is one) may use it.
-%sudo ALL=(ALL) ALL

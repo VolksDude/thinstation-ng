@@ -3,5 +3,40 @@
 # Start the Cockpit web service on demand (TCP 9090) once the image boots.
 systemctl enable cockpit.socket
 
-# The sudoers drop-in must not be group/world readable or sudo ignores it.
-chmod 0440 /etc/sudoers.d/cockpit
+# Cockpit's power dialog (Overview > Reboot / Shutdown) runs "shutdown".  The
+# systemd package drops that file, so provide it.  systemctl implements the
+# shutdown(8) interface when it is invoked under that name.
+ln -sf /usr/bin/systemctl /usr/bin/shutdown
+
+# Only root may log in to the web console, and no sudo rule is installed for
+# any other account.  Cockpit refuses root by default through the user names
+# listed in /etc/cockpit/disallowed-users (checked by /etc/pam.d/cockpit), so
+# take root off that list and add a PAM rule that rejects every other account.
+# A root session is already privileged, so it needs no "administrative access"
+# unlock and no sudo.
+if [ -f /etc/cockpit/disallowed-users ]; then
+	sed -i '/^[[:space:]]*root[[:space:]]*$/d' /etc/cockpit/disallowed-users
+fi
+if [ -f /etc/pam.d/cockpit ]; then
+	if [ -e /usr/lib64/security/pam_succeed_if.so ]; then
+		if ! grep -q 'pam_succeed_if.so user = root' /etc/pam.d/cockpit; then
+			{
+				echo "# ThinStation: only root may log in to the Cockpit web console"
+				echo "auth       requisite    pam_succeed_if.so user = root quiet"
+				echo "account    requisite    pam_succeed_if.so user = root quiet"
+				cat /etc/pam.d/cockpit
+			} > /etc/pam.d/cockpit.thinstation
+			mv /etc/pam.d/cockpit.thinstation /etc/pam.d/cockpit
+		fi
+	else
+		# Fall back to a deny list so the unprivileged accounts still cannot
+		# log in; a missing module must not lock root out as well.
+		echo "WARNING: pam_succeed_if.so not found; denying Cockpit login for $TSUSER and tsadmin instead" >&2
+		{
+			echo "$TSUSER"
+			echo "tsadmin"
+		} >> /etc/cockpit/disallowed-users
+	fi
+else
+	echo "WARNING: /etc/pam.d/cockpit not found; Cockpit login is not restricted to root" >&2
+fi
