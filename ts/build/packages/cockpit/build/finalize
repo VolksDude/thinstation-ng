@@ -8,29 +8,44 @@ systemctl enable cockpit.socket
 # shutdown(8) interface when it is invoked under that name.
 ln -sf /usr/bin/systemctl /usr/bin/shutdown
 
-# Only root may log in to the web console, and no sudo rule is installed for
-# any other account.  Cockpit refuses root by default through the user names
-# listed in /etc/cockpit/disallowed-users (checked by /etc/pam.d/cockpit), so
-# take root off that list and add a PAM rule that rejects every other account.
-# A root session is already privileged, so it needs no "administrative access"
-# unlock and no sudo.
-if [ -f /etc/cockpit/disallowed-users ]; then
-	sed -i '/^[[:space:]]*root[[:space:]]*$/d' /etc/cockpit/disallowed-users
+# One dedicated account, "param cockpituser" in build.conf (exported to this
+# script as COCKPITUSER by the build), is the only account that may log in to
+# the web console and the only one with administrative access there.  The
+# account itself is created by the build; here it gets a home directory and a
+# sudo rule, which is what Cockpit's "Administrative access" switch uses.
+# root keeps Cockpit's default of being refused.
+if [ -n "$COCKPITUSER" ]; then
+	mkdir -p "/home/$COCKPITUSER"
+	chown "$COCKPITUSER:$COCKPITUSER" "/home/$COCKPITUSER"
+	chmod 0700 "/home/$COCKPITUSER"
+
+	mkdir -p /etc/sudoers.d
+	printf '%s ALL=(ALL:ALL) ALL\n' "$COCKPITUSER" > /etc/sudoers.d/cockpit
+	chmod 0440 /etc/sudoers.d/cockpit
+
+	pam_auth="auth       requisite    pam_succeed_if.so user = $COCKPITUSER quiet"
+	pam_acct="account    requisite    pam_succeed_if.so user = $COCKPITUSER quiet"
+else
+	echo "WARNING: param cockpituser is not set; nobody will be able to log in to Cockpit" >&2
+	pam_auth="auth       requisite    pam_deny.so"
+	pam_acct="account    requisite    pam_deny.so"
 fi
+
+# Reject every other account in Cockpit's PAM stack.
 if [ -f /etc/pam.d/cockpit ]; then
 	if [ -e /usr/lib64/security/pam_succeed_if.so ]; then
-		if ! grep -q 'pam_succeed_if.so user = root' /etc/pam.d/cockpit; then
+		if ! grep -q 'ThinStation: Cockpit login' /etc/pam.d/cockpit; then
 			{
-				echo "# ThinStation: only root may log in to the Cockpit web console"
-				echo "auth       requisite    pam_succeed_if.so user = root quiet"
-				echo "account    requisite    pam_succeed_if.so user = root quiet"
+				echo "# ThinStation: Cockpit login is limited to the account from param cockpituser"
+				echo "$pam_auth"
+				echo "$pam_acct"
 				cat /etc/pam.d/cockpit
 			} > /etc/pam.d/cockpit.thinstation
 			mv /etc/pam.d/cockpit.thinstation /etc/pam.d/cockpit
 		fi
 	else
-		# Fall back to a deny list so the unprivileged accounts still cannot
-		# log in; a missing module must not lock root out as well.
+		# A missing module must not lock the Cockpit account out as well, so
+		# fall back to refusing the other known accounts.
 		echo "WARNING: pam_succeed_if.so not found; denying Cockpit login for $TSUSER and tsadmin instead" >&2
 		{
 			echo "$TSUSER"
@@ -38,5 +53,5 @@ if [ -f /etc/pam.d/cockpit ]; then
 		} >> /etc/cockpit/disallowed-users
 	fi
 else
-	echo "WARNING: /etc/pam.d/cockpit not found; Cockpit login is not restricted to root" >&2
+	echo "WARNING: /etc/pam.d/cockpit not found; Cockpit login is not restricted to $COCKPITUSER" >&2
 fi

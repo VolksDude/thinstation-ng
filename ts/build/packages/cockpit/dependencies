@@ -6,3 +6,4 @@ pam
 python3
 glib
 openssl
+sudo

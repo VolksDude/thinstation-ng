@@ -256,6 +256,7 @@ package locale-en_US         # English (US)
 #package sshd                 # Secure shell server for remote login using dropbear
 #package openssh              # Secure shell server for remote login using openssh
 #package cockpit              # Web console for remote management (BIOS, uptime, reboot, logs) on HTTPS port 9090
+                              # (Hint) Only the account from "param cockpituser" below can log in
 
 ####################
 ### --- Xorg --- ###
@@ -325,6 +326,8 @@ param grubtheme		"default"
 param tsuser         tsuser
 param tsuserpasswd   pleasechangeme
 param rootpasswd     pleasechangeme
+param cockpituser        remotemanage	# Package cockpit: the only account that can log in to the web console, with administrative access
+param cockpituserpasswd  pleasechangeme	# Package cockpit: password of that account
 #param xorgvncpasswd  pleasechangeme			# VNC Access Password
 #param storagepasswd  pleasechangeme			# Password for storage server
 #param sambapasswd    pleasechangeme			# Password for samba shares when using user mode security
